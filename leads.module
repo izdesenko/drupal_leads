@@ -1,0 +1,347 @@
+<?php
+
+function leads_cities() {
+  return array(1 => t('Moscow'), 2 => t('Saint Petersburg'), 3 => t('Rostov-on-Don'));
+}
+
+function leads_help($path, $arg) {
+  switch($path) {
+    case 'leads/add':
+      $help = t('This page provides form where you can submit your application to accounting services.');
+      break;
+    case 'leads/list':
+      $help = t('On this page you can preview all the applications to accounting services.');
+      break;
+  }
+  if(!empty($help)) {
+    return '<p>' . $help . '</p>';
+  } 
+}
+
+function leads_menu() {
+  $items = array();
+  $items['leads/add'] = array(
+    'title' => t('Submit lead'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('leads_add_form'),
+    'access callback' => TRUE,
+    'expanded' => TRUE,
+  );
+  $items['leads/list'] = array(
+    'title' => t('Leads list'),
+    'page callback' => 'leads_list',
+    'access arguments' => array('administer users'),
+    'expanded' => TRUE,
+  );
+  return $items;
+}
+
+function leads_add_form($form, &$form_state) {
+  $form['name'] = array(
+    '#type' => 'textfield',
+	'#title' => t('FIO'),
+	'#required' => true,
+  );
+  $form['phone'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Mobile phone(RF)'),
+    '#description' => t('Input phone in +7(999) 123-45-67 format'),
+	'#required' => true,
+  );
+  $form['mail'] = array(
+    '#type' => 'textfield',
+    '#title' => t('E-mail'),
+	'#required' => true,
+  );
+  $form['city'] = array(
+    '#type' => 'select',
+    '#title' => t('City'),
+    '#options' => leads_cities(),
+	'#required' => true,
+  );
+  $form['file_inn'] = array(
+    '#type' => 'file',
+    '#title' => t('Choose a INN scan file'),
+  );
+  $form['send'] = array(
+    '#type' => 'submit',
+    '#title' => t('Send'),
+    '#value' => t('Send'),
+  );
+  
+  $form['#attached']['js'] = array(leads_public_url_to_relative('public://leads/leads.js'));
+  return $form;
+}
+
+function leads_add_form_validate($form, &$form_state) {
+  if(!preg_match('/\+7 \(\d+\) \d{3}-\d{2}-\d{2}/',$form_state['values']['phone'])) {
+    form_set_error('phone', t('Phone format is not correct'));
+  }
+  if(!filter_var(
+	  $form_state['values']['city'],
+	  FILTER_VALIDATE_INT,
+	  array('options' => array('min_range' => 1, 'max_range' => 3)))
+  ){
+    form_set_error('city', t('You only able to choose city from Moscow, Saint Petersburg or Rostov-on-Don'));
+  }
+  
+  if(!preg_match('/.+@.+/',$form_state['values']['mail'])) {
+    form_set_error('mail', t('Input correct mail'));
+  }else{
+
+	$busy = db_select('leads', 'l')
+	  ->fields('l',array('lid'))
+	  ->condition('l.mail', $form_state['values']['mail'])
+      ->range(0, 1)
+	  ->execute()
+	  ->fetchObject();
+    
+	if($busy) {
+      form_set_error('mail', t('Lead with this email already exists.'));
+	}
+  }
+  
+  $file = file_save_upload('file_inn', array(
+    'file_validate_is_image' => array(),
+    'file_validate_extensions' => array('png jpe jpg jpeg'),
+  ),'temporary://',FILE_EXISTS_RENAME);
+  
+  if($file) {
+    $form_state['storage']['file_inn'] = $file;
+	
+    $new_user = array(
+      // Имя - обязательный уникальный параметр при сохранении пользователя.
+      // Поэтому генерим рандомные имена. Дальше на regberry шлём имя указанное в заявке.
+      'name' => leads_generate_original_username(),
+      'pass' => uniqid(),
+      'mail' => $form_state['values']['mail'],
+      'status' => 1,
+      'init' => $form_state['values']['mail'],
+      'roles' => array(
+        DRUPAL_AUTHENTICATED_RID => 'authenticated user',
+      ),
+    );
+	
+    if($user = user_save('', $new_user)) {
+      $form_state['storage']['user_id'] = $user->uid;
+	}else{
+      form_set_error('mail', t('Failed to create new user'));
+	}
+  } else {
+    form_set_error('file_inn', t('INN required.'));
+  }
+}
+
+function leads_add_form_submit($form, &$form_state) {
+  $upload = $form_state['storage']['file_inn'];
+  $ext = strtolower(pathinfo($upload->uri)['extension']);
+  $filename = 'public://leads/';
+  $filename .= uniqid(rand().time());
+  $thumb_name = $filename.'_thumb.'.$ext;
+  $filename .= '.'.$ext;
+  $file = file_move($upload,$filename,FILE_EXISTS_RENAME); // original file
+  
+  $thumb = image_load($filename);
+  $img = image_scale_and_crop($thumb,100,100);
+  
+  image_save($thumb,$thumb_name); // create thumbnail
+  
+  if($tiff = leads_image_create_tiff($filename)) {
+    $zip = leads_zip($tiff);
+  }
+  
+  $wrapper = file_stream_wrapper_get_instance_by_uri($tiff);
+  $wrapper->unlink($filename);
+  $wrapper->unlink($tiff);
+  
+  $lead = array(
+    'name' => $form_state['values']['name'],
+    'mail' => $form_state['values']['mail'],
+    'phone' => $form_state['values']['phone'],
+    'city' => $form_state['values']['city'],
+	'thumb' => leads_public_url_to_relative($thumb_name),
+	'zip' => leads_public_url_to_relative($zip),
+	'user_id' => $form_state['storage']['user_id'],
+    'rb_status' => 'OK',
+    'rb_uuid' => rand(),
+    'created' => date('Y-m-d H:i:s', REQUEST_TIME));
+  
+  db_insert('leads')->fields($lead)->execute();
+  
+  drupal_set_message(t('Lead has been submitted. Name: @name, phone: @phone, city: @city',
+    array(
+      '@name' => $lead['name'],
+      '@phone' => $lead['phone'],
+      '@city' => leads_cities()[$lead['city']],
+    )
+  ));
+}
+
+function leads_generate_original_username() {
+  do {
+    $name = 'lead_user'.rand();
+	$found = db_select('users', 'u')
+	  ->fields('u',array('uid'))
+	  ->condition('u.name', $name)
+      ->range(0, 1)
+	  ->execute()
+	  ->fetchObject();
+  } while ($found);
+  
+  return $name;
+}
+
+function leads_list() {
+  $filter = drupal_get_form('leads_list_filter_form');
+  # configure the table header columns
+  $header = array(
+    array('data' => 'ID'),
+    array('data' => t('FIO')),
+    array('data' => t('E-mail')),
+    array('data' => t('City')),
+    array('data' => t('INN')),
+    array('data' => t('Status')),
+    array('data' => t('Uuid')),
+  );
+  
+  $select = db_select('leads', 'l')
+    ->fields('l')
+    ->extend('PagerDefault')
+	->orderBy('l.created','DESC')
+	->limit(10);
+  
+  if(!empty($_SESSION['leads.filter.dt_start'])) {
+    $select->condition('l.created',  leads_format_dt($_SESSION['leads.filter.dt_start']), '>');
+  }
+  if(!empty($_SESSION['leads.filter.dt_end'])) {
+    $select->condition('l.created', leads_format_dt($_SESSION['leads.filter.dt_end'],'23:59'), '<');
+  }
+  if(!empty($_SESSION['leads.filter.city'])) {
+    $select->condition('l.city', $_SESSION['leads.filter.city']);
+  }
+  
+  $results = $select->execute();
+  
+  $rows = array();
+  $cities = leads_cities();
+  foreach ($results as $row) {
+    $rows[] = array(
+      $row->lid,
+      $row->name,
+      $row->mail,
+      $cities[$row->city],
+	  t('<a href="!link" title="!title"><img src="!thumb" alt="!title" /></a>', array(
+        '!link' => $row->zip,
+        '!thumb' => $row->thumb,
+        '!title' => t('download'))),
+      $row->rb_status,
+      $row->rb_uuid);
+  }
+  
+  $output = drupal_render($filter);
+  $output .= theme('table', array('header' => $header, 'rows' => $rows ));
+  $output .= theme('pager');
+
+  return $output;
+}
+
+function leads_list_filter_form($form, &$form_state) {
+  $form['filter'] = array(
+    '#type' => 'fieldset',
+	'#title' => t('Filter'), 
+    '#collapsible' => true, 
+	'#collapsed' => false,
+  );
+  $form['filter']['dt-start'] = array(
+    '#type' => 'date',
+	'#title' => t('Datetime range start'),
+  );
+  $form['filter']['dt-end'] = array(
+    '#type' => 'date',
+	'#title' => t('Datetime range end'),
+  );
+  $form['filter']['city'] = array(
+    '#type' => 'select',
+    '#title' => t('City'),
+    '#options' => leads_cities(),
+  );
+  $form['filter']['reset'] = array(
+    '#type' => 'submit',
+    '#value' => t('Reset'),
+    '#submit' => array('leads_list_filter_form_reset'),
+  );
+  $form['filter']['send'] = array(
+    '#type' => 'submit',
+    '#value' => t('Send'),
+    '#submit' => array('leads_list_filter_form_submit'),
+  );
+  
+  if(!empty($_SESSION['leads.filter.dt_start'])) {
+    $form['filter']['dt-start']['#default_value'] = $_SESSION['leads.filter.dt_start'];
+  }
+  if(!empty($_SESSION['leads.filter.dt_end'])) {
+    $form['filter']['dt-end']['#default_value'] = $_SESSION['leads.filter.dt_end'];
+  }
+  if(!empty($_SESSION['leads.filter.city'])) {
+    $form['filter']['city']['#default_value'] = $_SESSION['leads.filter.city'];
+  }
+  
+  return $form;
+}
+
+function leads_list_filter_form_submit($form, &$form_state) {
+  if($dt_start = $form_state['values']['dt-start']) {
+    $_SESSION['leads.filter.dt_start'] = $dt_start;
+  }
+  $dt_end = $form_state['values']['dt-end'];
+  if($dt_end && !($dt_start && leads_dates_diff_sec($dt_start, $dt_end) > 0)) {
+    $_SESSION['leads.filter.dt_end'] = $dt_end;
+  }
+  if($city = $form_state['values']['city']) {
+    $_SESSION['leads.filter.city'] = $city;
+  }
+}
+
+function leads_list_filter_form_reset($form, &$form_state) {
+  unset($_SESSION['leads.filter.dt_start']);
+  unset($_SESSION['leads.filter.dt_end']);
+  unset($_SESSION['leads.filter.city']);
+}
+
+function leads_public_url_to_relative($src) {
+  $wrapper = file_stream_wrapper_get_instance_by_uri($src);
+  return '/'.$wrapper->getDirectoryPath().'/'.substr($src,9);
+}
+
+function leads_dates_diff_sec($dt1,$dt2) {
+  $dt1_f = leads_format_dt($dt1);
+  $dt2_f = leads_format_dt($dt2);
+  
+  return strtotime($dt1_f) - strtotime($dt2_f);
+}
+
+function leads_format_dt($dt,$time = '00:00') {
+  return sprintf("%'.04d-%'.02d-%'.02d $time",$dt['year'],$dt['month'],$dt['day']);
+}
+
+function leads_image_create_tiff($path) {
+  $new_path = preg_replace('/\.(jpg|jpe|jpeg|png)$/i', '.tiff', $path);
+  return _leads_shell(__DIR__.'/leads.sh '.drupal_realpath($path).' '.drupal_realpath($new_path)) ? $new_path : false;
+}
+
+function leads_zip($path) {
+  $new_path = preg_replace('/\.tiff$/i', '.zip', $path);
+  return _leads_shell('zip -j '.drupal_realpath($new_path).' '.drupal_realpath($path)) ? $new_path : false;
+}
+
+function _leads_shell($cmd) {
+  $proc = proc_open($cmd, array(2 => array('pipe','w')), $pipes);
+  
+  $error = stream_get_contents($pipes[2]);
+  fclose($pipes[2]);
+  proc_close($proc);
+  
+  return !$error;
+}
+
+?>

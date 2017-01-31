@@ -1,0 +1,101 @@
+<?php
+
+// создание директории и загрузка переводов (если в системе доступен русский язык).
+function leads_install(){
+  $public = 'public://leads';
+  file_prepare_directory($public, FILE_CREATE_DIRECTORY);
+  file_unmanaged_copy(__DIR__.'/leads.js', $public, FILE_EXISTS_REPLACE);
+  
+  $abs_path = __DIR__.'/leads.ru.po';
+  $file = (object) array('filename' => drupal_basename($abs_path), 'uri' => $abs_path);
+  _locale_import_po($file, 'ru', 1, 'default');
+  cache_clear_all('locale:', 'cache', TRUE);
+}
+
+function leads_uninstall(){
+  file_unmanaged_delete_recursive('public://leads');
+}
+
+function leads_schema(){
+  $schema['leads'] = array(
+    'description' => 'Store users leads',
+    'fields' => array(
+      'lid'  => array(
+        'type' => 'serial',
+        'not null' => true,
+        'description' => t('Primary Key: Unique lead ID.'),
+      ),
+      'user_id'  => array(
+        'type' => 'int',
+        'not null' => true,
+        'description' => t('Primary Key: Unique lead ID.'),
+      ),
+      'name' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => true,
+        'description' => t('Name of the person.'),
+      ),
+      'mail' => array(
+        'type' => 'varchar',
+        'length' => 255,
+		'unique' => true,
+        'not null' => true,
+        'description' => t('Name of the person.'),
+      ),
+      'phone' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => true,
+        'description' => t('Name of the person.'),
+      ),
+      'city' => array(
+        'type' => 'int',
+        'size' => 'tiny',
+		'unsigned' => true,
+        'not null' => true,
+        'description' => t('Name of the person.'),
+      ),
+	  'thumb' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => true,
+        'description' => t('Path to INN preview.'),
+	  ),
+	  'zip' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => true,
+        'description' => t('Path to zipped INN.'),
+	  ),
+	  'rb_status' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => true,
+		'default' => '',
+        'description' => t('Status of regberry registration'),
+	  ),
+	  'rb_uuid' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => true,
+		'default' => '',
+        'description' => t('Uuid of regberry registration.'),
+	  ),
+	  'created' => array(
+        'type' => 'datetime',
+        'mysql_type' => 'datetime',
+        'not null' => true,
+        'description' => t('Datetime when lead was created.'),
+	  )
+    ),
+    'primary key' => array('lid'),
+    'unique keys' => array(
+      'mail' => array('mail')
+    ),
+  );
+
+  return $schema;
+}
+
+?>

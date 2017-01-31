@@ -1,0 +1,90 @@
+# Russian translation of Drupal core (7.53)
+# Copyright (c) 2016 by the Russian translation team
+#
+msgid ""
+msgstr ""
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "Moscow"
+msgstr "Москва"
+
+msgid "Saint Petersburg"
+msgstr "Санкт-Перербург"
+
+msgid "Rostov-on-Don"
+msgstr "Ростов-на-Дону"
+
+msgid "This page provides form where you can submit your application to accounting services."
+msgstr "На этой странице находится форма, с помощью которой вы можете подать заявку на бух.обслуживание."
+
+msgid "On this page you can preview all the applications to accounting services."
+msgstr "На этой странице вы можете ознакомиться с заявками на бух.обслуживаниие."
+
+msgid "Submit lead"
+msgstr "Подать заявку"
+
+msgid "Leads list"
+msgstr "Список заявок"
+
+msgid "FIO"
+msgstr "ФИО"
+
+msgid "Mobile phone(RF)"
+msgstr "Мобильный телефон(РФ)"
+
+msgid "Input phone in +7(999) 123-45-67 format"
+msgstr "Введите телефон в формате +7(999) 123-45-67"
+
+msgid "City"
+msgstr "Город"
+
+msgid "Choose a INN scan file"
+msgstr "Выберите файл со сканом ИНН"
+
+msgid "Send"
+msgstr "Отправить"
+
+msgid "Phone format is not correct"
+msgstr "Формат телефона некорректный"
+
+msgid "You only able to choose city from Moscow, Saint Petersburg or Rostov-on-Don"
+msgstr "Вы можете выбрать только из городов Москва, Санкт-Петербург и Ростов-на-Дону"
+
+msgid "Input correct mail"
+msgstr "Введите корректный адрес электронной почты"
+
+msgid "Lead with this email already exists."
+msgstr "Заявка с этим электронным адресом уже существует."
+
+msgid "Failed to create new user"
+msgstr "Не получилось создать нового пользователя"
+
+msgid "INN required."
+msgstr "ИНН обязательно."
+
+msgid "Lead has been submitted. Name: @name, phone: @phone, city: @city"
+msgstr "Заявка была подана. ФИО: @name, тел: @phone, город: @city"
+
+msgid "INN"
+msgstr "ИНН"
+
+msgid "Created"
+msgstr "Создана"
+
+msgid "download"
+msgstr "скачать"
+
+msgid "Filter"
+msgstr "Фильтр"
+
+msgid "Datetime range start"
+msgstr "Старт периода дат"
+
+msgid "Datetime range end"
+msgstr "Конец периода дат"
+
+msgid "Reset"
+msgstr "Сбросить"
+

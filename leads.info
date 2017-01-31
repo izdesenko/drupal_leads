@@ -1,0 +1,7 @@
+name = Leads
+description = Submit your lead for some services
+core = 7.x
+version = "7.x-0.x-dev"
+
+project = "leads"
+
